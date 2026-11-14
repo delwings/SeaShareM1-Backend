@@ -1,0 +1,4 @@
+# Solo se carga con el perfil "local" (el de por defecto en tu computador)
+logging:
+  level:
+    com.seashare: DEBUG
