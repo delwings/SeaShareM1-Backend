@@ -1,6 +1,6 @@
 # Toda la configuración sensible llega por variables de entorno (T016). No hay secretos en el código.
 server:
-  port: ${APP_PORT:8081}
+  port: 8081
 
 spring:
   application:
@@ -8,9 +8,10 @@ spring:
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:local}
   datasource:
-    url: ${DB_URL:jdbc:mysql://localhost:3306/seashare}
-    username: ${DB_USERNAME:root}
-    password: ${DB_PASSWORD:}
+    url: jdbc:mysql://db-mysql:3306/${MYSQL_DATABASE}
+    username: ${MYSQL_USER}
+    password: ${MYSQL_PASSWORD}
+
   jpa:
     open-in-view: false
     hibernate:
