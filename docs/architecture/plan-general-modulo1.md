@@ -68,14 +68,14 @@
 - Base de datos: el modelo físico existente es inmutable, salvo la columna `registered_at` en `vessel` (ver «Almacenamiento»).
 - Control de acceso: por roles `OWNER` y `ADMIN`, con JWT y sin seguridad fuerte, como se describe en «Seguridad».
 - Despliegue: en la nube con opciones gratuitas, sujeto a sus límites, disponibilidad y condiciones vigentes.
-- Integración: el Módulo 3 se comunica por API REST, sin API key, con contrato acordado (UC02). El mecanismo y el contrato con el Módulo 2 son **[POR DEFINIR]**.
+- Integración: el Módulo 3 y el Módulo 2 consultan al Módulo 1 por API REST, sin API key ni seguridad entre módulos. Con el Módulo 2 todo es HTTP, sin RabbitMQ y sin autenticación (contrato de integración v2.0 del 19 de noviembre de 2026; ver «Frontera con los módulos 2 y 3»).
 - Idioma: código en inglés e interfaz en español.
 
 **Escala/Alcance**: la aplicación se desarrollará inicialmente para un entorno académico y un volumen reducido de usuarios concurrentes. No se establecen compromisos de escalabilidad masiva ni objetivos de crecimiento empresarial. Las necesidades adicionales de capacidad y rendimiento se evaluarán si el alcance del proyecto cambia.
 
 ## Modelo físico de datos
 
-Es la fuente de verdad de la base de datos (MySQL 8, InnoDB, `utf8mb4`) y lo reproducen las migraciones Flyway V1 a V7. Los identificadores son UUID guardados como `CHAR(36)`. Diagrama: `docs/diagrams/modelo-fisico-modulo1.svg` (también en PNG).
+Es la fuente de verdad de la base de datos (MySQL 8, InnoDB, `utf8mb4`) y lo reproducen las migraciones Flyway V1 a V11. Los identificadores son UUID guardados como `CHAR(36)`. Diagrama: `docs/diagrams/modelo-fisico-modulo1.svg` (también en PNG).
 
 ![Modelo físico del Módulo 1](diagrams/modelo-fisico-modulo1.svg)
 
@@ -154,19 +154,36 @@ Es la fuente de verdad de la base de datos (MySQL 8, InnoDB, `utf8mb4`) y lo rep
 | V5 | Usuarios iniciales de prueba (1 administrador y 5 propietarios) |
 | V6 | Columna `vessel.registered_at` |
 | V7 | Eliminación lógica: `vessel.deleted_at`, `vessel.deleted_by` y la matrícula única solo entre no eliminadas (`active_legal_registration`) |
+| V8 | Nuevo tipo de notificación `VESSEL_DELETED` (el administrador elimina una embarcación) |
+| V9 | `vessel.review_requested`: marca que el propietario ya solicitó la revisión del mantenimiento actual (una sola vez) |
+| V10 | Estado operativo por avisos del Módulo 2: `vessel.status_changed_at` y las tablas `processed_event` (avisos ya procesados) y `vessel_status_history` (historial de cambios de estado, automáticos y manuales). Excepción autorizada el 13 de noviembre de 2026 |
+| V11 | Integración M1–M2 v2.0 (autorizada el 19 de noviembre de 2026): columnas `vessel.maintenance_start` y `vessel.maintenance_until` (ventana del mantenimiento, en UTC) y tabla `maintenance_event_outbox` (avisos de mantenimiento pendientes de enviar al Módulo 2) |
 
 ## Frontera con los módulos 2 y 3
 
-Con el Módulo 3 la comunicación es por API REST, y el Módulo 1 solo responde cuando lo llaman. Esos endpoints no llevan API key, y las convenciones de la API están en «Contexto técnico». Con el Módulo 2 el mecanismo es **[POR DEFINIR]**: primero se hace funcionar el Módulo 1 por sí solo y después se integra con ese módulo. El Módulo 1 no llama a otros módulos.
+Toda la comunicación entre módulos es **HTTP**, sin RabbitMQ y sin autenticación entre módulos (decisión D-01 del contrato de integración M1–M2 v2.0, del 19 de noviembre de 2026). El Módulo 1 responde las consultas de los módulos 2 y 3 y, por primera vez, **llama al Módulo 2** para avisarle de un mantenimiento (C5).
 
 | Módulo | Qué da el Módulo 1 | Qué recibe el Módulo 1 |
 |---|---|---|
-| Módulo 2 (Gestión de reservas) | La información de la embarcación (consulta; mecanismo **[POR DEFINIR]**). | La asignación de estado operativo de la embarcación (mecanismo **[POR DEFINIR]**). |
-| Módulo 3 (Gestión de liquidación) | La tarifa base (consulta). | Nada. |
+| Módulo 2 (Gestión de reservas) | Ficha de la embarcación (C1), catálogo paginado (C2) y estado operativo con la ventana de mantenimiento (C3). Además le **envía** el aviso de mantenimiento (C5). | El aviso del nuevo estado operativo (C4, HTTP). |
+| Módulo 3 (Gestión de liquidación) | La tarifa base (consulta REST por lote). | Nada. |
 
-**Contrato con el Módulo 3**: UC02 «Brindar tarifa base», `POST /api/v1/fleet/base-rates`. Recibe una lista `boat_ids` y responde una lista `rates` con `boat_id` y `base_rate`. Es una consulta de solo lectura, sin efectos secundarios, con un tiempo de respuesta menor a 500 ms para lotes de hasta 50 embarcaciones.
+**Endpoints de integración (los de entrada son públicos, sin autenticación)**
 
-**Contrato con el Módulo 2**: **[POR DEFINIR]**. El Módulo 2 compartió una propuesta de contrato para el aviso de estado operativo (evento asíncrono por RabbitMQ, fechado el 22 de octubre de 2026). No se incorpora a este plan hasta decidir cómo se integra el Módulo 1 con ese módulo. Esa decisión incluye el consumo de la cola, los nombres del exchange, la routing key y la cola, el orden de los eventos y cómo evitar duplicados sin cambiar el modelo físico.
+| Conexión | Módulo | Método y ruta | Para qué sirve | Archivos principales |
+|---|---|---|---|---|
+| — | 3 | `POST /api/v1/boats/base-rates` | Recibe `boat_ids` y devuelve la tarifa base de cada una | `BaseRateController`, `BaseRateQueryService` |
+| C1 | 2 | `GET /api/v1/vessels/{id}` | Ficha de la embarcación (pasos 1 y 2, foto y estado; sin tarifa) | `ReservationsVesselController`, `ReservationsVesselQueryService` |
+| C2 | 2 | `GET /api/v1/vessels?page&size&q` | Catálogo paginado `{vessels[], pagination{...}}`; todas las registradas (ni borrador ni eliminadas), por nombre; `q` filtra por nombre o puerto | `ReservationsVesselController`, `VesselCatalogResponse` |
+| C3 | 2 | `GET /api/v1/vessels/{id}/operational-status` | Estado operativo con `maintenance_start` y `maintenance_until` (siempre presentes, `null` si no hay). Si el fin ya pasó responde `AVAILABLE` con fechas `null` (liberación perezosa, sin job) | `OperationalStatusResponse`, `ReservationsVesselQueryService` |
+| C4 | 2 | `POST /api/v1/internal/status-events` | Aviso de estado (`event_id`, `vessel_id`, `operational_status`, `occurred_at`). Ahora acepta `AVAILABLE → NAVIGATION` | `StatusEventController`, `AssignOperationalStatusService` |
+| C5 | 1 → 2 | `POST {M2_BASE_URL}/api/v1/internal/maintenance-events` | Aviso de mantenimiento iniciado por el propietario o el administrador | `MaintenanceEventRelay`, tabla `maintenance_event_outbox` |
+
+**Mantenimiento con ventana (D-05 a D-07, D-09, D-11, D-12).** Al enviar a mantenimiento (propietario o administrador) la fecha de fin `maintenance_until` es obligatoria, futura y posterior al inicio `maintenance_start`, que es opcional (por defecto, ahora). Se guarda en `vessel` y, en la misma transacción, se escribe el aviso en `maintenance_event_outbox`. Un proceso en segundo plano (`MaintenanceEventRelay`, cada segundo) lo envía al Módulo 2 con conexión de 1 s y lectura de 5 s, hasta 5 intentos con esperas de 1, 5, 25 y 125 s ante timeout, 503 o 5xx, y sin reintentar ante 4xx. La URL del Módulo 2 viene de la variable de entorno `M2_BASE_URL` (sin valor por defecto; vacía = no se envía nada). Terminar el mantenimiento antes de tiempo no envía aviso. Un mantenimiento que llega por el aviso C4 (`MAINTENANCE_CLEANING`) no tiene ventana ni genera aviso C5.
+
+**Contrato con el Módulo 3**: UC02 «Brindar tarifa base», `POST /api/v1/boats/base-rates`. Recibe una lista `boat_ids` y responde una lista `rates` con `boat_id` y `base_rate`. Es una consulta de solo lectura, sin efectos secundarios, con un tiempo de respuesta menor a 500 ms para lotes de hasta 50 embarcaciones.
+
+**Contrato con el Módulo 2**: contrato de integración M1–M2 v2.0 (19 de noviembre de 2026, normativo) y su diagnóstico de factibilidad. Los estados `IN_NAVIGATION` y `MAINTENANCE_CLEANING` que usa M2 se aceptan y equiparan a `NAVIGATION` y `MAINTENANCE`; M2 dejó de enviar `RESERVED`. Zona horaria de los puertos: `America/Bogota` (fija en el código; no hay columna en la base).
 
 **Regla de negocio**: una embarcación solo está disponible si tiene toda su información completa, así que el Módulo 1 nunca devuelve una tarifa base nula.
 
@@ -339,11 +356,11 @@ Los secretos no se versionan ni se incluyen en el frontend.
 - [x] T004 Frontend: configurar ESLint (JavaScript) y Prettier (HTML, CSS y JavaScript) para el análisis estático y el formato.
 - [x] T005 Backend: preparar las pruebas unitarias, de integración y de arquitectura con ArchUnit, de modo que Maven pueda ejecutarlas.
 - [x] T006 Backend: configurar JaCoCo con un mínimo de 80 % para el código propio de `domain` y `application`:
-    - se mide sobre las clases de producción;
-    - se excluyen las clases generadas automáticamente y el código ajeno a la lógica propia de esas capas, justificando cada exclusión;
-    - la verificación falla por debajo del 80 %;
-    - el umbral no se exige al resto del backend;
-    - en el Setup esos paquetes aún no tienen lógica, así que la verificación no debe fallar por falta de clases que medir.
+  - se mide sobre las clases de producción;
+  - se excluyen las clases generadas automáticamente y el código ajeno a la lógica propia de esas capas, justificando cada exclusión;
+  - la verificación falla por debajo del 80 %;
+  - el umbral no se exige al resto del backend;
+  - en el Setup esos paquetes aún no tienen lógica, así que la verificación no debe fallar por falta de clases que medir.
 - [x] T007 Frontend: configurar Vitest con jsdom y una prueba sencilla de ejemplo.
 - [x] T008 Ambos: definir scripts y comandos claros para ejecutar las pruebas y las verificaciones de calidad.
 - [x] T009 Ambos: documentar en el README de cada repositorio los comandos principales para instalar dependencias, ejecutar el proyecto, probarlo, verificar la calidad y consultar el informe de cobertura. En el frontend se incluye cómo servir el sitio en local, porque los módulos ES requieren un servidor.
@@ -378,7 +395,7 @@ Los secretos no se versionan ni se incluyen en el frontend.
 
 ## Pendientes por definir
 
-1. Mecanismo y contrato de integración con el Módulo 2. La propuesta recibida usa RabbitMQ, lo que implicaría agregar un broker y un adaptador de entrada de mensajes, y decidir cómo evitar duplicados y desorden sin cambiar el modelo físico. Se aborda después de que el Módulo 1 funcione por sí solo.
+1. ~~Consumidor de RabbitMQ~~ Ya no aplica: el Módulo 2 cambió a HTTP (contrato v2.0). Pendiente de confirmar con el Módulo 2: valor real de `M2_BASE_URL` al desplegar.
 2. Origen de CORS de producción (dominio de Vercel), que se conoce al desplegar, y confirmar que los nombres de las variables de entorno coinciden con la convención del Módulo 3.
 3. Las verificaciones previas de la sección «Despliegue e Infraestructura» que siguen abiertas: límites de los planes gratuitos, versión de MySQL en Aiven, conectividad, variables de cada plataforma, HTTPS y respaldos.
 4. ~~Liberación de la matrícula legal cuando una embarcación se elimina~~ Resuelto en la migración V7 (ver «Contexto técnico»).

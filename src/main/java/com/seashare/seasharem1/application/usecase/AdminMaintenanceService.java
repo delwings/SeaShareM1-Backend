@@ -7,11 +7,13 @@ import com.seashare.seasharem1.application.port.out.PortRepositoryPort;
 import com.seashare.seasharem1.application.port.out.VesselRepositoryPort;
 import com.seashare.seasharem1.domain.exception.BoatMaintenanceConflictException;
 import com.seashare.seasharem1.domain.exception.ResourceNotFoundException;
+import com.seashare.seasharem1.domain.model.MaintenanceWindow;
 import com.seashare.seasharem1.domain.model.NotificationType;
 import com.seashare.seasharem1.domain.model.Port;
 import com.seashare.seasharem1.domain.model.Vessel;
 import com.seashare.seasharem1.domain.model.VesselStatus;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -47,16 +49,18 @@ public class AdminMaintenanceService implements AdminMaintenanceUseCase {
   }
 
   @Override
-  public CompletedBoat sendToMaintenance(UUID adminId, UUID boatId, String reason) {
+  public CompletedBoat sendToMaintenance(
+      UUID adminId, UUID boatId, String reason, Instant start, Instant until) {
     String cleanReason = AdminReason.require(reason, "Escribe el motivo del mantenimiento.");
     Vessel vessel = find(boatId);
+    MaintenanceWindow window = MaintenancePeriod.resolve(start, until, clock);
     if (vessel.status() == VesselStatus.MAINTENANCE) {
       return completed(vessel);
     }
     if (!vessel.canBeSentToMaintenance()) {
       throw conflict(CANNOT_SEND, vessel);
     }
-    if (!vessels.startMaintenanceAsAdmin(boatId)) {
+    if (!vessels.startMaintenanceAsAdmin(boatId, window)) {
       Vessel current = find(boatId);
       if (current.status() != VesselStatus.MAINTENANCE) {
         throw conflict(CANNOT_SEND, current);

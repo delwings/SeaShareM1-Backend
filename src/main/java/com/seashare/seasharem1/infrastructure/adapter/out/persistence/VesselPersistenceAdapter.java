@@ -1,9 +1,11 @@
 package com.seashare.seasharem1.infrastructure.adapter.out.persistence;
 
+import com.seashare.seasharem1.application.port.out.VesselPage;
 import com.seashare.seasharem1.application.port.out.VesselRepositoryPort;
 import com.seashare.seasharem1.domain.exception.BusinessConflictException;
 import com.seashare.seasharem1.domain.exception.FieldViolation;
 import com.seashare.seasharem1.domain.model.MaintenanceBy;
+import com.seashare.seasharem1.domain.model.MaintenanceWindow;
 import com.seashare.seasharem1.domain.model.Port;
 import com.seashare.seasharem1.domain.model.Vessel;
 import com.seashare.seasharem1.domain.model.VesselStatus;
@@ -112,25 +114,95 @@ public class VesselPersistenceAdapter implements VesselRepositoryPort {
   }
 
   @Override
-  public boolean startMaintenance(UUID id, UUID ownerId, MaintenanceBy by) {
+  public boolean startMaintenance(
+      UUID id, UUID ownerId, MaintenanceBy by, MaintenanceWindow window) {
     LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
-    return manualChange(
+    return startWithOutbox(
         id,
-        VesselStatus.AVAILABLE,
-        VesselStatus.MAINTENANCE,
+        by,
+        window,
         now,
-        repository.startMaintenance(id.toString(), ownerId.toString(), by.name(), now));
+        () ->
+            repository.startMaintenance(
+                id.toString(), ownerId.toString(), by.name(), window.start(), window.until(), now));
   }
 
   @Override
-  public boolean startMaintenanceAsAdmin(UUID id) {
+  public boolean startMaintenanceAsAdmin(UUID id, MaintenanceWindow window) {
     LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
-    return manualChange(
+    return startWithOutbox(
         id,
-        VesselStatus.AVAILABLE,
-        VesselStatus.MAINTENANCE,
+        MaintenanceBy.ADMIN,
+        window,
         now,
-        repository.startMaintenanceAsAdmin(id.toString(), now));
+        () ->
+            repository.startMaintenanceAsAdmin(id.toString(), window.start(), window.until(), now));
+  }
+
+  /**
+   * Inicia el mantenimiento, anota el historial y deja el aviso para el Módulo 2 en una sola
+   * transacción: si algo falla, no queda ni el cambio ni el aviso a medias.
+   */
+  private boolean startWithOutbox(
+      UUID id,
+      MaintenanceBy by,
+      MaintenanceWindow window,
+      LocalDateTime now,
+      java.util.function.IntSupplier update) {
+    Boolean started =
+        transaction.execute(
+            status -> {
+              if (update.getAsInt() == 0) {
+                return false;
+              }
+              insertHistory(
+                  id, VesselStatus.AVAILABLE, VesselStatus.MAINTENANCE, now, "MANUAL", null);
+              jdbc.update(
+                  "INSERT INTO maintenance_event_outbox "
+                      + "(event_id, vessel_id, maintenance_start, maintenance_until, occurred_at, "
+                      + "reason, status, attempts, next_attempt_at) "
+                      + "VALUES (?, ?, ?, ?, ?, ?, 'PENDING', 0, ?)",
+                  UUID.randomUUID().toString(),
+                  id.toString(),
+                  window.start(),
+                  window.until(),
+                  now,
+                  by.name(),
+                  now);
+              return true;
+            });
+    return Boolean.TRUE.equals(started);
+  }
+
+  @Override
+  public Optional<MaintenanceWindow> findMaintenanceWindow(UUID id) {
+    return Optional.ofNullable(
+        jdbc.query(
+            "SELECT maintenance_start, maintenance_until FROM vessel WHERE id = ?",
+            rs -> {
+              if (!rs.next()) {
+                return null;
+              }
+              LocalDateTime start = rs.getObject(1, LocalDateTime.class);
+              LocalDateTime until = rs.getObject(2, LocalDateTime.class);
+              return start == null || until == null ? null : new MaintenanceWindow(start, until);
+            },
+            id.toString()));
+  }
+
+  @Override
+  public VesselPage searchRegistered(String query, int page, int size) {
+    String pattern = null;
+    if (query != null && !query.isBlank()) {
+      String escaped =
+          query.trim().toLowerCase().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+      pattern = "%" + escaped + "%";
+    }
+    var result =
+        repository.searchRegistered(
+            pattern, org.springframework.data.domain.PageRequest.of(page - 1, size));
+    return new VesselPage(
+        result.getContent().stream().map(mapper::toDomain).toList(), result.getTotalElements());
   }
 
   @Override

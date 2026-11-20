@@ -47,9 +47,11 @@ import com.seashare.seasharem1.application.usecase.ReservationsVesselQueryServic
 import java.time.Clock;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 /** Registra los casos de uso (Java puro) como beans. Cada funcionalidad agrega los suyos aquí. */
 @Configuration
+@EnableScheduling // entrega de avisos de mantenimiento al Módulo 2 (outbox)
 public class UseCaseConfig {
 
   @Bean
@@ -165,8 +167,8 @@ public class UseCaseConfig {
 
   @Bean
   public OwnerMaintenanceService ownerMaintenanceService(
-      VesselRepositoryPort vessels, PortRepositoryPort ports) {
-    return new OwnerMaintenanceService(vessels, ports);
+      VesselRepositoryPort vessels, PortRepositoryPort ports, Clock clock) {
+    return new OwnerMaintenanceService(vessels, ports, clock);
   }
 
   @Bean

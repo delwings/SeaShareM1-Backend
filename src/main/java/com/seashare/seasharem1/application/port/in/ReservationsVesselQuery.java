@@ -30,6 +30,16 @@ public interface ReservationsVesselQuery {
    */
   OperationalStatus getOperationalStatus(UUID vesselId);
 
+  /**
+   * Catálogo paginado de embarcaciones registradas (ni borrador ni eliminadas), de cualquier
+   * estado, ordenadas por nombre.
+   *
+   * @param query texto libre sobre el nombre o el puerto; nulo o vacío = todas
+   * @param page página, desde 1 (un valor menor se toma como 1)
+   * @param size tamaño de página (por defecto 20, máximo 100)
+   */
+  CatalogPage getCatalog(String query, int page, int size);
+
   /** Ficha de la embarcación para el Módulo 2. {@code port} puede ser nulo si faltara el dato. */
   record VesselInfo(
       UUID id,
@@ -44,5 +54,25 @@ public interface ReservationsVesselQuery {
       UUID ownerId,
       String ownerName) {}
 
-  record OperationalStatus(UUID vesselId, VesselStatus status, Instant queriedAt) {}
+  /**
+   * Estado operativo con la ventana de mantenimiento ({@code maintenanceStart} y {@code
+   * maintenanceUntil} son nulos si no hay). Si el fin del mantenimiento ya pasó se informa
+   * Disponible y sin fechas.
+   */
+  record OperationalStatus(
+      UUID vesselId,
+      VesselStatus status,
+      Instant queriedAt,
+      Instant maintenanceStart,
+      Instant maintenanceUntil) {}
+
+  record CatalogItem(
+      UUID id, String name, VesselType type, String photoUrl, Port port, int maxCapacity) {}
+
+  record CatalogPage(List<CatalogItem> items, int page, int size, long totalItems) {
+
+    public int totalPages() {
+      return (int) ((totalItems + size - 1) / size);
+    }
+  }
 }

@@ -2,6 +2,7 @@ package com.seashare.seasharem1.unit.application;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.seashare.seasharem1.application.port.in.ReservationsVesselQuery.OperationalStatus;
@@ -10,6 +11,7 @@ import com.seashare.seasharem1.application.port.out.UserRepositoryPort;
 import com.seashare.seasharem1.application.usecase.ReservationsVesselQueryService;
 import com.seashare.seasharem1.domain.exception.ResourceNotFoundException;
 import com.seashare.seasharem1.domain.model.AdditionalServices;
+import com.seashare.seasharem1.domain.model.MaintenanceWindow;
 import com.seashare.seasharem1.domain.model.Port;
 import com.seashare.seasharem1.domain.model.User;
 import com.seashare.seasharem1.domain.model.UserRole;
@@ -185,5 +187,97 @@ class ReservationsVesselQueryServiceTest {
       assertThrows(ResourceNotFoundException.class, () -> service.getOperationalStatus(id));
     }
     assertFalse(vessels.store.get(draft.id()).deleted());
+  }
+
+  @Test
+  void statusExposesTheMaintenanceWindowWhileItIsActive() {
+    Vessel vessel = registered(AdditionalServices.none());
+    putStatus(vessel, VesselStatus.MAINTENANCE);
+    vessels.windows.put(
+        vessel.id(),
+        new MaintenanceWindow(
+            LocalDateTime.of(2026, 11, 13, 10, 0), LocalDateTime.of(2026, 11, 20, 18, 0)));
+
+    OperationalStatus status = service.getOperationalStatus(vessel.id());
+
+    assertEquals(VesselStatus.MAINTENANCE, status.status());
+    assertEquals(Instant.parse("2026-11-13T10:00:00Z"), status.maintenanceStart());
+    assertEquals(Instant.parse("2026-11-20T18:00:00Z"), status.maintenanceUntil());
+  }
+
+  @Test
+  void anExpiredMaintenanceIsReportedAsAvailableWithoutDatesAndNothingIsSaved() {
+    Vessel vessel = registered(AdditionalServices.none());
+    putStatus(vessel, VesselStatus.MAINTENANCE);
+    vessels.windows.put(
+        vessel.id(),
+        new MaintenanceWindow(
+            LocalDateTime.of(2026, 11, 10, 10, 0), LocalDateTime.of(2026, 11, 13, 17, 0)));
+
+    OperationalStatus status = service.getOperationalStatus(vessel.id());
+
+    assertEquals(VesselStatus.AVAILABLE, status.status());
+    assertNull(status.maintenanceStart());
+    assertNull(status.maintenanceUntil());
+    assertEquals(VesselStatus.AVAILABLE, service.getInfo(vessel.id()).status());
+    assertEquals(VesselStatus.MAINTENANCE, vessels.store.get(vessel.id()).status());
+  }
+
+  @Test
+  void aMaintenanceWithoutWindowStaysInMaintenanceWithNullDates() {
+    Vessel vessel = registered(AdditionalServices.none());
+    putStatus(vessel, VesselStatus.MAINTENANCE);
+
+    OperationalStatus status = service.getOperationalStatus(vessel.id());
+
+    assertEquals(VesselStatus.MAINTENANCE, status.status());
+    assertNull(status.maintenanceStart());
+    assertNull(status.maintenanceUntil());
+  }
+
+  @Test
+  void catalogListsRegisteredBoatsWithPaginationAndSearch() {
+    registered(AdditionalServices.none());
+    Vessel draft =
+        vessels.save(
+            Vessel.newDraft(
+                UUID.randomUUID(), owner.id(), "Borrador", "CP-05-2000-A", VesselType.YACHT, 6));
+
+    var all = service.getCatalog(null, 1, 20);
+    var none = service.getCatalog("zzz", 1, 20);
+
+    assertEquals(1, all.totalItems());
+    assertEquals(1, all.totalPages());
+    assertEquals("Río Magdalena II", all.items().get(0).name());
+    assertEquals("Marina Magdalena", all.items().get(0).port().name());
+    assertEquals(0, none.totalItems());
+    assertEquals(0, none.totalPages());
+    assertFalse(all.items().stream().anyMatch(item -> item.id().equals(draft.id())));
+    assertEquals(1, service.getCatalog(null, 0, 0).page());
+    assertEquals(20, service.getCatalog(null, 1, 0).size());
+  }
+
+  private void putStatus(Vessel vessel, VesselStatus state) {
+    vessels.store.put(
+        vessel.id(),
+        new Vessel(
+            vessel.id(),
+            vessel.name(),
+            vessel.legalRegistration(),
+            vessel.type(),
+            vessel.maxCapacity(),
+            vessel.photoPath(),
+            vessel.hasLifeJackets(),
+            vessel.hasCoolerWithIce(),
+            vessel.hasSoundSystem(),
+            vessel.hasFishingGear(),
+            vessel.hasDivingGear(),
+            vessel.baseRate(),
+            state,
+            vessel.maintenanceBy(),
+            vessel.portId(),
+            vessel.ownerId(),
+            vessel.deleted(),
+            vessel.registeredAt()));
   }
 }

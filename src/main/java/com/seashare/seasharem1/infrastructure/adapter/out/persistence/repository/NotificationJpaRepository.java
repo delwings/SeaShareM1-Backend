@@ -33,7 +33,8 @@ public interface NotificationJpaRepository extends JpaRepository<NotificationEnt
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(
       value =
-          "UPDATE notification SET is_read = TRUE WHERE recipient_id = :recipient AND is_read = FALSE",
+          "UPDATE notification SET is_read = TRUE WHERE recipient_id = :recipient AND is_read ="
+              + " FALSE",
       nativeQuery = true)
   int markAllRead(@Param("recipient") String recipient);
 }

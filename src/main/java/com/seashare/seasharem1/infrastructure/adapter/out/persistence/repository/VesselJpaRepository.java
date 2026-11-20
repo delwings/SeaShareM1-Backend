@@ -28,6 +28,21 @@ public interface VesselJpaRepository extends JpaRepository<VesselEntity, UUID> {
 
   boolean existsByLegalRegistrationAndDeletedFalse(String legalRegistration);
 
+  /** Catálogo paginado: registradas, por nombre; el filtro mira el nombre y el puerto. */
+  @Query(
+      value =
+          "SELECT v.* FROM vessel v LEFT JOIN port p ON p.id = v.port_id "
+              + "WHERE v.deleted = FALSE AND v.status <> 'DRAFT' "
+              + "AND (:q IS NULL OR LOWER(v.name) LIKE :q OR LOWER(p.name) LIKE :q) "
+              + "ORDER BY v.name, v.id",
+      countQuery =
+          "SELECT COUNT(*) FROM vessel v LEFT JOIN port p ON p.id = v.port_id "
+              + "WHERE v.deleted = FALSE AND v.status <> 'DRAFT' "
+              + "AND (:q IS NULL OR LOWER(v.name) LIKE :q OR LOWER(p.name) LIKE :q)",
+      nativeQuery = true)
+  org.springframework.data.domain.Page<VesselEntity> searchRegistered(
+      @Param("q") String likePattern, org.springframework.data.domain.Pageable pageable);
+
   /**
    * Eliminación lógica en una sola sentencia: solo actúa si la embarcación sigue sin eliminar y en
    * uno de los estados dados. Devuelve las filas afectadas (0 o 1). Se escribe nativa porque la
@@ -51,15 +66,17 @@ public interface VesselJpaRepository extends JpaRepository<VesselEntity, UUID> {
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(
       value =
-          "UPDATE vessel SET status = 'MAINTENANCE', maintenance_by = :by, review_requested = FALSE, "
-              + "status_changed_at = :at "
-              + "WHERE id = :id AND owner_id = :ownerId AND deleted = FALSE "
-              + "AND status = 'AVAILABLE'",
+          "UPDATE vessel SET status = 'MAINTENANCE', maintenance_by = :by, review_requested ="
+              + " FALSE, maintenance_start = :start, maintenance_until = :until, status_changed_at"
+              + " = :at WHERE id = :id AND owner_id = :ownerId AND deleted = FALSE AND status ="
+              + " 'AVAILABLE'",
       nativeQuery = true)
   int startMaintenance(
       @Param("id") String id,
       @Param("ownerId") String ownerId,
       @Param("by") String by,
+      @Param("start") LocalDateTime start,
+      @Param("until") LocalDateTime until,
       @Param("at") LocalDateTime at);
 
   /**
@@ -70,11 +87,10 @@ public interface VesselJpaRepository extends JpaRepository<VesselEntity, UUID> {
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(
       value =
-          "UPDATE vessel SET status = 'AVAILABLE', maintenance_by = NULL, review_requested = FALSE, "
-              + "status_changed_at = :at "
-              + "WHERE id = :id AND owner_id = :ownerId AND deleted = FALSE "
-              + "AND status = 'MAINTENANCE' "
-              + "AND (maintenance_by IS NULL OR maintenance_by <> 'ADMIN')",
+          "UPDATE vessel SET status = 'AVAILABLE', maintenance_by = NULL, review_requested = FALSE,"
+              + " maintenance_start = NULL, maintenance_until = NULL, status_changed_at = :at WHERE"
+              + " id = :id AND owner_id = :ownerId AND deleted = FALSE AND status = 'MAINTENANCE'"
+              + " AND (maintenance_by IS NULL OR maintenance_by <> 'ADMIN')",
       nativeQuery = true)
   int finishMaintenance(
       @Param("id") String id, @Param("ownerId") String ownerId, @Param("at") LocalDateTime at);
@@ -84,21 +100,25 @@ public interface VesselJpaRepository extends JpaRepository<VesselEntity, UUID> {
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(
       value =
-          "UPDATE vessel SET status = 'MAINTENANCE', maintenance_by = 'ADMIN', review_requested = FALSE, "
-              + "status_changed_at = :at "
-              + "WHERE id = :id AND deleted = FALSE AND status = 'AVAILABLE'",
+          "UPDATE vessel SET status = 'MAINTENANCE', maintenance_by = 'ADMIN', review_requested ="
+              + " FALSE, maintenance_start = :start, maintenance_until = :until, status_changed_at"
+              + " = :at WHERE id = :id AND deleted = FALSE AND status = 'AVAILABLE'",
       nativeQuery = true)
-  int startMaintenanceAsAdmin(@Param("id") String id, @Param("at") LocalDateTime at);
+  int startMaintenanceAsAdmin(
+      @Param("id") String id,
+      @Param("start") LocalDateTime start,
+      @Param("until") LocalDateTime until,
+      @Param("at") LocalDateTime at);
 
   /** Mantenimiento a Disponible por el administrador, solo si él la envió. */
   @Transactional
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(
       value =
-          "UPDATE vessel SET status = 'AVAILABLE', maintenance_by = NULL, review_requested = FALSE, "
-              + "status_changed_at = :at "
-              + "WHERE id = :id AND deleted = FALSE AND status = 'MAINTENANCE' "
-              + "AND maintenance_by = 'ADMIN'",
+          "UPDATE vessel SET status = 'AVAILABLE', maintenance_by = NULL, review_requested = FALSE,"
+              + " maintenance_start = NULL, maintenance_until = NULL, status_changed_at = :at WHERE"
+              + " id = :id AND deleted = FALSE AND status = 'MAINTENANCE' AND maintenance_by ="
+              + " 'ADMIN'",
       nativeQuery = true)
   int finishMaintenanceAsAdmin(@Param("id") String id, @Param("at") LocalDateTime at);
 
@@ -111,7 +131,7 @@ public interface VesselJpaRepository extends JpaRepository<VesselEntity, UUID> {
   @Query(
       value =
           "UPDATE vessel SET status = :next, maintenance_by = NULL, review_requested = FALSE, "
-              + "status_changed_at = :at "
+              + "maintenance_start = NULL, maintenance_until = NULL, status_changed_at = :at "
               + "WHERE id = :id AND deleted = FALSE AND status = :expected "
               + "AND (status_changed_at IS NULL OR status_changed_at <= :at)",
       nativeQuery = true)

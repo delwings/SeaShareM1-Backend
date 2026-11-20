@@ -30,7 +30,8 @@ public class AssignOperationalStatusService implements AssignOperationalStatusUs
       new EnumMap<>(VesselStatus.class);
 
   static {
-    ALLOWED.put(VesselStatus.AVAILABLE, EnumSet.of(VesselStatus.RESERVED));
+    // AVAILABLE -> NAVIGATION: el Módulo 2 ya no envía RESERVED (contrato v2.0, D-03).
+    ALLOWED.put(VesselStatus.AVAILABLE, EnumSet.of(VesselStatus.RESERVED, VesselStatus.NAVIGATION));
     ALLOWED.put(
         VesselStatus.RESERVED,
         EnumSet.of(VesselStatus.NAVIGATION, VesselStatus.MAINTENANCE, VesselStatus.AVAILABLE));

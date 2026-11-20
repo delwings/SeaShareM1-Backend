@@ -24,7 +24,8 @@ public class RequestMaintenanceReviewService implements RequestMaintenanceReview
 
   static final String NOT_FOUND = "Embarcación no encontrada.";
   static final String NOT_ADMIN_MAINTENANCE =
-      "Solo se puede solicitar revisión de una embarcación enviada a mantenimiento por el administrador.";
+      "Solo se puede solicitar revisión de una embarcación enviada a mantenimiento por el"
+          + " administrador.";
 
   private final VesselRepositoryPort vessels;
   private final UserRepositoryPort users;

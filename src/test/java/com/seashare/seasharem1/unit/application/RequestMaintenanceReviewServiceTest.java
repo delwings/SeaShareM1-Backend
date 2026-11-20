@@ -170,7 +170,10 @@ class RequestMaintenanceReviewServiceTest {
     service.requestReview(OWNER, vessel.id());
 
     vessels.finishMaintenanceAsAdmin(vessel.id());
-    vessels.startMaintenanceAsAdmin(vessel.id());
+    vessels.startMaintenanceAsAdmin(
+        vessel.id(),
+        new com.seashare.seasharem1.domain.model.MaintenanceWindow(
+            LocalDateTime.of(2026, 11, 4, 0, 0), LocalDateTime.of(2026, 11, 10, 0, 0)));
     assertFalse(vessels.store.get(vessel.id()).reviewRequested());
     service.requestReview(OWNER, vessel.id());
 
