@@ -1,0 +1,34 @@
+services:
+  db-mysql:
+    image: mysql:8.0
+    container_name: seashare-mysql
+    restart: unless-stopped
+
+    env_file:
+      - .env
+
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p$${MYSQL_ROOT_PASSWORD} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+    ports:
+      - "33066:3306"
+
+  backend:
+    build: SeaShareM1/.
+    env_file:
+      - SeaShareM1/.env
+    ports:
+      - "8081:8081"
+    depends_on:
+      db-mysql:
+        condition: service_healthy
+
+volumes:
+  mysql_data:
