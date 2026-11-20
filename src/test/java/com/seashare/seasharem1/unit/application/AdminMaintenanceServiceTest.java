@@ -31,6 +31,7 @@ class AdminMaintenanceServiceTest {
   private static final UUID OWNER = UUID.randomUUID();
   private static final UUID ADMIN = UUID.randomUUID();
   private static final String REASON = "Revisión obligatoria del motor.";
+  private static final Instant UNTIL = Instant.parse("2026-11-10T00:00:00Z");
 
   private int sequence;
   private Fakes.Vessels vessels;
@@ -89,7 +90,7 @@ class AdminMaintenanceServiceTest {
   void sendsAnyOwnersBoatToMaintenanceRecordsAdminAndNotifiesWithTheReason() {
     Vessel vessel = boat(VesselStatus.AVAILABLE, null);
 
-    var result = service.sendToMaintenance(ADMIN, vessel.id(), "  " + REASON + "  ");
+    var result = service.sendToMaintenance(ADMIN, vessel.id(), "  " + REASON + "  ", null, UNTIL);
 
     assertEquals(VesselStatus.MAINTENANCE, result.vessel().status());
     assertEquals(MaintenanceBy.ADMIN, result.vessel().maintenanceBy());
@@ -111,7 +112,7 @@ class AdminMaintenanceServiceTest {
       ValidationFailedException failure =
           assertThrows(
               ValidationFailedException.class,
-              () -> service.sendToMaintenance(ADMIN, vessel.id(), reason));
+              () -> service.sendToMaintenance(ADMIN, vessel.id(), reason, null, UNTIL));
       assertEquals("reason", failure.violations().get(0).field());
     }
     assertEquals(VesselStatus.AVAILABLE, vessels.store.get(vessel.id()).status());
@@ -126,7 +127,7 @@ class AdminMaintenanceServiceTest {
       BoatMaintenanceConflictException failure =
           assertThrows(
               BoatMaintenanceConflictException.class,
-              () -> service.sendToMaintenance(ADMIN, vessel.id(), REASON));
+              () -> service.sendToMaintenance(ADMIN, vessel.id(), REASON, null, UNTIL));
       assertEquals(status, failure.currentStatus());
     }
     assertTrue(notifications.store.isEmpty());
@@ -135,9 +136,9 @@ class AdminMaintenanceServiceTest {
   @Test
   void sendingTwiceIsIdempotentAndDoesNotNotifyAgain() {
     Vessel vessel = boat(VesselStatus.AVAILABLE, null);
-    service.sendToMaintenance(ADMIN, vessel.id(), REASON);
+    service.sendToMaintenance(ADMIN, vessel.id(), REASON, null, UNTIL);
 
-    var again = service.sendToMaintenance(ADMIN, vessel.id(), REASON);
+    var again = service.sendToMaintenance(ADMIN, vessel.id(), REASON, null, UNTIL);
 
     assertEquals(VesselStatus.MAINTENANCE, again.vessel().status());
     assertEquals(1, notifications.store.size());
@@ -147,7 +148,7 @@ class AdminMaintenanceServiceTest {
   void aBoatAlreadySentByTheOwnerKeepsItsOriginWhenTheAdminSendsIt() {
     Vessel vessel = boat(VesselStatus.MAINTENANCE, MaintenanceBy.OWNER);
 
-    var result = service.sendToMaintenance(ADMIN, vessel.id(), REASON);
+    var result = service.sendToMaintenance(ADMIN, vessel.id(), REASON, null, UNTIL);
 
     assertEquals(MaintenanceBy.OWNER, result.vessel().maintenanceBy());
     assertTrue(notifications.store.isEmpty());
@@ -214,10 +215,10 @@ class AdminMaintenanceServiceTest {
 
     assertThrows(
         ResourceNotFoundException.class,
-        () -> service.sendToMaintenance(ADMIN, UUID.randomUUID(), REASON));
+        () -> service.sendToMaintenance(ADMIN, UUID.randomUUID(), REASON, null, UNTIL));
     assertThrows(
         ResourceNotFoundException.class,
-        () -> service.sendToMaintenance(ADMIN, draft.id(), REASON));
+        () -> service.sendToMaintenance(ADMIN, draft.id(), REASON, null, UNTIL));
     assertThrows(
         ResourceNotFoundException.class, () -> service.finishMaintenance(ADMIN, deleted.id()));
   }
@@ -227,9 +228,28 @@ class AdminMaintenanceServiceTest {
     Vessel vessel = boat(VesselStatus.AVAILABLE, null);
     notifications.failing = true;
 
-    service.sendToMaintenance(ADMIN, vessel.id(), REASON);
+    service.sendToMaintenance(ADMIN, vessel.id(), REASON, null, UNTIL);
 
     assertEquals(VesselStatus.MAINTENANCE, vessels.store.get(vessel.id()).status());
     assertFalse(vessels.store.get(vessel.id()).deleted());
+  }
+
+  @Test
+  void sendingToMaintenanceRequiresAFutureEnd() {
+    Vessel vessel = boat(VesselStatus.AVAILABLE, null);
+
+    assertThrows(
+        ValidationFailedException.class,
+        () -> service.sendToMaintenance(ADMIN, vessel.id(), REASON, null, null));
+    assertEquals(VesselStatus.AVAILABLE, vessels.store.get(vessel.id()).status());
+  }
+
+  @Test
+  void sendingToMaintenanceStoresTheWindow() {
+    Vessel vessel = boat(VesselStatus.AVAILABLE, null);
+
+    service.sendToMaintenance(ADMIN, vessel.id(), REASON, null, UNTIL);
+
+    assertEquals(LocalDateTime.of(2026, 11, 10, 0, 0), vessels.windows.get(vessel.id()).until());
   }
 }

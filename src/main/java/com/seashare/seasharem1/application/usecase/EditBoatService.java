@@ -72,7 +72,7 @@ public class EditBoatService implements EditBoatUseCase {
           violations, "photo", RegistrationRules.imageError(command.photo()));
     }
     if (!violations.isEmpty()) {
-      throw new ValidationFailedException(violations);
+      throw new ValidationFailedException(editMessages(violations));
     }
 
     String photoPath = vessel.photoPath();
@@ -108,6 +108,17 @@ public class EditBoatService implements EditBoatUseCase {
             .findById(saved.portId())
             .orElseThrow(() -> new IllegalStateException("La embarcación editada no tiene puerto"));
     return new CompletedBoat(saved, savedPort);
+  }
+
+  /** En la edición, "campo vacío" usa el mensaje corto de esa pantalla. */
+  private static List<FieldViolation> editMessages(List<FieldViolation> violations) {
+    return violations.stream()
+        .map(
+            violation ->
+                RegistrationRules.REQUIRED.equals(violation.message())
+                    ? new FieldViolation(violation.field(), RegistrationRules.EDIT_REQUIRED)
+                    : violation)
+        .toList();
   }
 
   private Vessel findOwned(UUID ownerId, UUID boatId) {

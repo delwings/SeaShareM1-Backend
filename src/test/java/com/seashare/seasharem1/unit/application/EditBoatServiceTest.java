@@ -318,6 +318,24 @@ class EditBoatServiceTest {
   }
 
   @Test
+  void emptyFieldsUseTheShortRequiredMessage() {
+    Vessel vessel = registered("CP-01-0001-A");
+
+    ValidationFailedException failure =
+        assertThrows(
+            ValidationFailedException.class,
+            () ->
+                service.edit(
+                    new EditBoatCommand(OWNER, vessel.id(), "", "", "", "", "", "", null, null)));
+
+    assertTrue(
+        failure.violations().stream()
+            .filter(v -> !v.field().equals("coordinates"))
+            .allMatch(v -> RegistrationRules.EDIT_REQUIRED.equals(v.message())));
+    assertEquals(5, failure.violations().size());
+  }
+
+  @Test
   void capacityAboveTheTypeLimitIsRejected() {
     Vessel vessel = registered("CP-01-0001-A");
     EditBoatCommand base = command(OWNER, vessel.id());

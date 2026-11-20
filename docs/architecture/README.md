@@ -25,16 +25,16 @@ Todos los contratos del Módulo 1 se especifican en archivos individuales dentro
 
 | Archivo                                                                                      | Operación / Método                                                                      | Quién → Quién                 | UC   |
 | -------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | ----------------------------- | ---- |
-| [`rest/UC01-registrar-embarcacion.md`](rest/UC01-registrar-embarcacion.md)                   | `POST /api/v1/fleet/vessels/draft`<br>`POST /api/v1/fleet/vessels/{vessel_id}/complete` | Propietario → Sistema         | UC01 |
+| [`rest/UC01-registrar-embarcacion.md`](contracts/rest/UC01-registrar-embarcacion.md)                   | `POST /api/v1/fleet/vessels/draft`<br>`POST /api/v1/fleet/vessels/{vessel_id}/complete` | Propietario → Sistema         | UC01 |
 | `rest/UC02-cancelar-registro.md`                                                             | Sin endpoint (acción de interfaz)                                                       | Propietario → Frontend        | UC02 |
-| [`rest/UC03-editar-informacion.md`](rest/UC03-editar-informacion.md)                         | `PUT /api/v1/fleet/vessels/{vessel_id}`                                                 | Propietario → Sistema         | UC03 |
+| [`rest/UC03-editar-informacion.md`](contracts/rest/UC03-editar-informacion.md)                         | `PUT /api/v1/fleet/vessels/{vessel_id}`                                                 | Propietario → Sistema         | UC03 |
 | [`rest/UC04-consultar-informacion-web.md`](rest/UC04-consultar-informacion-web.md)           | `GET /api/v1/fleet/vessels/{vessel_id}`                                                 | Propietario / Admin → Sistema | UC04 |
 | [`rest/UC04-consultar-informacion-internal.md`](rest/UC04-consultar-informacion-embarcacion) | `GET /internal/v1/vessels/{vessel_id}`<br>`GET /internal/v1/vessels` (Lote/Catálogo)    | Reservas (M2) → Sistema       | UC04 |
-| [`rest/UC05-enviar-a-mantenimiento.md`](rest/UC05-enviar-a-mantenimiento.md)                 | `POST /api/v1/fleet/vessels/{vessel_id}/maintenance`                                    | Propietario / Admin → Sistema | UC05 |
-| [`rest/UC06-eliminar-registro.md`](rest/UC06-eliminar-registro.md)                           | `DELETE /api/v1/fleet/vessels/{vessel_id}`                                              | Propietario / Admin → Sistema | UC06 |
-| [`rest/UC07-asignar-estado-operativo.md`](rest/UC07-asignar-estado-operativo.md)             | `PATCH /internal/v1/vessels/{vessel_id}/status`                                         | Reservas (M2) → Sistema       | UC07 |
-| [`rest/UC08-consultar-tarifa-base.md`](rest/UC08-consultar-tarifa-base.md)                   | `POST /internal/v1/fleet/base-rates`                                                    | Financiero (M3) → Sistema     | UC08 |
-| [`rest/UC09-revisar-propietario.md`](rest/UC09-revisar-propietario.md)                       | `GET /api/v1/admin/owners`                                                              | Administrador → Sistema       | UC09 |
+| [`rest/UC05-enviar-a-mantenimiento.md`](contracts/rest/UC05-enviar-a-mantenimiento.md)                 | `POST /api/v1/fleet/vessels/{vessel_id}/maintenance`                                    | Propietario / Admin → Sistema | UC05 |
+| [`rest/UC06-eliminar-registro.md`](contracts/rest/UC06-eliminar-registro.md)                           | `DELETE /api/v1/fleet/vessels/{vessel_id}`                                              | Propietario / Admin → Sistema | UC06 |
+| [`rest/UC07-asignar-estado-operativo.md`](contracts/rest/UC07-asignar-estado-operativo.md)             | `PATCH /internal/v1/vessels/{vessel_id}/status`                                         | Reservas (M2) → Sistema       | UC07 |
+| [`rest/UC08-consultar-tarifa-base.md`](contracts/rest/UC08-consultar-tarifa-base.md)                   | `POST /internal/v1/fleet/base-rates`                                                    | Financiero (M3) → Sistema     | UC08 |
+| [`rest/UC09-revisar-propietario.md`](contracts/rest/UC09-revisar-propietario.md)                       | `GET /api/v1/admin/owners`                                                              | Administrador → Sistema       | UC09 |
 
 ---
 

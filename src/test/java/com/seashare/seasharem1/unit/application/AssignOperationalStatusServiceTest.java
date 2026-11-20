@@ -193,7 +193,7 @@ class AssignOperationalStatusServiceTest {
         service.assign(event("e2", maintenance, "AVAILABLE", "2026-11-13T10:00:00Z")));
     assertEquals(
         Outcome.INVALID_TRANSITION,
-        service.assign(event("e3", available, "IN_NAVIGATION", "2026-11-13T10:00:00Z")));
+        service.assign(event("e3", available, "MAINTENANCE_CLEANING", "2026-11-13T10:00:00Z")));
     assertEquals(VesselStatus.MAINTENANCE, statusOf(maintenance));
     assertEquals(VesselStatus.AVAILABLE, statusOf(available));
   }
@@ -222,5 +222,15 @@ class AssignOperationalStatusServiceTest {
     assertThrows(
         ValidationFailedException.class,
         () -> service.assign(event("e1", b, null, "2026-11-13T10:00:00Z")));
+  }
+
+  @Test
+  void anAvailableBoatCanGoStraightToNavigation() {
+    Vessel available = boat(VesselStatus.AVAILABLE);
+
+    assertEquals(
+        Outcome.APPLIED,
+        service.assign(event("e1", available, "IN_NAVIGATION", "2026-11-13T10:00:00Z")));
+    assertEquals(VesselStatus.NAVIGATION, statusOf(available));
   }
 }

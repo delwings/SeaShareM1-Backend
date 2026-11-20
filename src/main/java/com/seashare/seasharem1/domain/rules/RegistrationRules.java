@@ -13,6 +13,12 @@ import java.util.regex.Pattern;
 public final class RegistrationRules {
 
   public static final String REQUIRED = "Este campo es obligatorio para continuar con el registro";
+
+  /**
+   * Mensaje de campo vacío en la edición (el del registro habla de "continuar con el registro").
+   */
+  public static final String EDIT_REQUIRED = "Este campo es obligatorio";
+
   public static final String NAME_INVALID =
       "El nombre debe tener entre 3 y 50 caracteres, contener al menos una letra y solo puede"
           + " incluir letras, números, espacios, tildes y guiones";

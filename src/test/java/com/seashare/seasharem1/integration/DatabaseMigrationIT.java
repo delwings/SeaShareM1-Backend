@@ -25,7 +25,7 @@ class DatabaseMigrationIT extends AbstractMySqlIT {
         jdbc.queryForObject(
             "SELECT COUNT(*) FROM flyway_schema_history WHERE success = 1", Integer.class);
 
-    assertEquals(10, applied);
+    assertEquals(11, applied);
   }
 
   @Test
@@ -38,6 +38,7 @@ class DatabaseMigrationIT extends AbstractMySqlIT {
     assertEquals(
         List.of(
             "flyway_schema_history",
+            "maintenance_event_outbox",
             "notification",
             "port",
             "processed_event",

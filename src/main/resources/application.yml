@@ -27,6 +27,9 @@ app:
   jwt:
     secret: ${JWT_SECRET} # sin valor por defecto: debe definirse en cada entorno
     expiration-minutes: ${JWT_EXPIRATION_MINUTES:30}
+  m2:
+    # URL base del Módulo 2 (sin valor por defecto). Vacía = no se envían avisos de mantenimiento.
+    base-url: ${M2_BASE_URL:}
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5500,http://127.0.0.1:5500}
   cloudinary:

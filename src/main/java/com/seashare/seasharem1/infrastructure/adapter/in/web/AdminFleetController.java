@@ -13,6 +13,7 @@ import com.seashare.seasharem1.domain.model.VesselStatus;
 import com.seashare.seasharem1.infrastructure.adapter.in.web.dto.AdminBoatListResponse;
 import com.seashare.seasharem1.infrastructure.adapter.in.web.dto.AdminDeleteRequest;
 import com.seashare.seasharem1.infrastructure.adapter.in.web.dto.CompletedBoatResponse;
+import com.seashare.seasharem1.infrastructure.adapter.in.web.dto.MaintenanceRequest;
 import com.seashare.seasharem1.infrastructure.adapter.in.web.dto.OwnerListResponse;
 import com.seashare.seasharem1.infrastructure.adapter.in.web.dto.OwnerResponse;
 import java.util.ArrayList;
@@ -122,10 +123,16 @@ public class AdminFleetController {
   public CompletedBoatResponse startMaintenance(
       @AuthenticationPrincipal Jwt jwt,
       @PathVariable UUID boatId,
-      @RequestBody(required = false) AdminDeleteRequest request) {
+      @RequestBody(required = false) MaintenanceRequest request) {
     return BoatWebMapper.toCompleted(
         maintenance.sendToMaintenance(
-            UUID.fromString(jwt.getSubject()), boatId, request == null ? null : request.reason()));
+            UUID.fromString(jwt.getSubject()),
+            boatId,
+            request == null ? null : request.reason(),
+            MaintenanceDates.parse(
+                "maintenance_start", request == null ? null : request.maintenanceStart()),
+            MaintenanceDates.parse(
+                "maintenance_until", request == null ? null : request.maintenanceUntil())));
   }
 
   /** Termina el mantenimiento que inició el administrador; el del propietario da 409. */

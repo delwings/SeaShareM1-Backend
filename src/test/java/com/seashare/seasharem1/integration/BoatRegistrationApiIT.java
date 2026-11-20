@@ -53,6 +53,7 @@ class BoatRegistrationApiIT extends AbstractMySqlIT {
   @BeforeEach
   void cleanAndStubStorage() {
     jdbc.update("DELETE FROM notification");
+    jdbc.update("DELETE FROM maintenance_event_outbox");
     jdbc.update("DELETE FROM vessel_status_history");
     jdbc.update("DELETE FROM processed_event");
     jdbc.update("DELETE FROM vessel");
@@ -450,11 +451,12 @@ class BoatRegistrationApiIT extends AbstractMySqlIT {
     assertEquals(200, status.statusCode());
     assertTrue(status.body().contains("\"operational_status\":\"AVAILABLE\""));
     assertTrue(status.body().matches(".*\"queried_at\":\"[^\"]+-05:00\".*"));
-    assertEquals(3, status.body().split("\":", -1).length - 1);
+    assertEquals(5, status.body().split("\":", -1).length - 1);
 
     assertEquals(
         200,
-        send("POST", "/api/v1/fleet/boats/" + boatId + "/maintenance/start", owner).statusCode());
+        postJson("/api/v1/fleet/boats/" + boatId + "/maintenance/start", UNTIL_JSON, owner)
+            .statusCode());
     assertTrue(
         getPublic("/api/v1/vessels/" + boatId + "/operational-status")
             .body()
@@ -555,7 +557,10 @@ class BoatRegistrationApiIT extends AbstractMySqlIT {
             .body()
             .contains("\"outcome\":\"UNKNOWN_VESSEL\""));
     assertTrue(
-        postJson(url, statusEvent("evt-8", boatId, "IN_NAVIGATION", "2026-11-13T10:00:00Z"), null)
+        postJson(
+                url,
+                statusEvent("evt-8", boatId, "MAINTENANCE_CLEANING", "2026-11-13T10:00:00Z"),
+                null)
             .body()
             .contains("\"outcome\":\"INVALID_TRANSITION\""));
     assertEquals(400, postJson(url, "{}", null).statusCode());
@@ -565,7 +570,9 @@ class BoatRegistrationApiIT extends AbstractMySqlIT {
             .statusCode());
   }
 
-  private static final String REASON_JSON = "{\"reason\":\"Revisión obligatoria del motor\"}";
+  private static final String UNTIL_JSON = "{\"maintenance_until\":\"2099-01-01T00:00:00Z\"}";
+  private static final String REASON_JSON =
+      "{\"reason\":\"Revisión obligatoria del motor\",\"maintenance_until\":\"2099-01-01T00:00:00Z\"}";
 
   @Test
   void adminSendsToMaintenanceWithAReasonAndTheOwnerIsNotified() throws Exception {
@@ -636,7 +643,7 @@ class BoatRegistrationApiIT extends AbstractMySqlIT {
   void adminCannotFinishAMaintenanceTheOwnerStarted() throws Exception {
     String owner = login("1010000002");
     String boatId = registerBoat(owner, "UNO");
-    send("POST", "/api/v1/fleet/boats/" + boatId + "/maintenance/start", owner);
+    postJson("/api/v1/fleet/boats/" + boatId + "/maintenance/start", UNTIL_JSON, owner);
 
     HttpResponse<String> response =
         send(
@@ -879,7 +886,7 @@ class BoatRegistrationApiIT extends AbstractMySqlIT {
     String boatId = registerBoat(owner, "UNO");
 
     HttpResponse<String> started =
-        send("POST", "/api/v1/fleet/boats/" + boatId + "/maintenance/start", owner);
+        postJson("/api/v1/fleet/boats/" + boatId + "/maintenance/start", UNTIL_JSON, owner);
 
     assertEquals(200, started.statusCode());
     assertTrue(started.body().contains("\"status\":\"MAINTENANCE\""));
@@ -906,8 +913,8 @@ class BoatRegistrationApiIT extends AbstractMySqlIT {
     String finish = "/api/v1/fleet/boats/" + boatId + "/maintenance/finish";
 
     assertEquals(200, send("POST", finish, owner).statusCode());
-    assertEquals(200, send("POST", start, owner).statusCode());
-    assertEquals(200, send("POST", start, owner).statusCode());
+    assertEquals(200, postJson(start, UNTIL_JSON, owner).statusCode());
+    assertEquals(200, postJson(start, UNTIL_JSON, owner).statusCode());
   }
 
   @Test
@@ -917,7 +924,7 @@ class BoatRegistrationApiIT extends AbstractMySqlIT {
     jdbc.update("UPDATE vessel SET status = 'RESERVED' WHERE id = ?", boatId);
 
     HttpResponse<String> response =
-        send("POST", "/api/v1/fleet/boats/" + boatId + "/maintenance/start", owner);
+        postJson("/api/v1/fleet/boats/" + boatId + "/maintenance/start", UNTIL_JSON, owner);
 
     assertEquals(409, response.statusCode());
     assertTrue(response.body().contains("\"current_status\":\"RESERVED\""));
@@ -951,7 +958,8 @@ class BoatRegistrationApiIT extends AbstractMySqlIT {
 
     assertEquals(
         404,
-        send("POST", "/api/v1/fleet/boats/" + boatId + "/maintenance/start", other).statusCode());
+        postJson("/api/v1/fleet/boats/" + boatId + "/maintenance/start", UNTIL_JSON, other)
+            .statusCode());
     assertEquals(
         404,
         send("POST", "/api/v1/fleet/boats/" + UUID.randomUUID() + "/maintenance/finish", other)
@@ -964,7 +972,10 @@ class BoatRegistrationApiIT extends AbstractMySqlIT {
 
     assertEquals(
         403,
-        send("POST", "/api/v1/fleet/boats/" + boatId + "/maintenance/start", login("1010000001"))
+        postJson(
+                "/api/v1/fleet/boats/" + boatId + "/maintenance/start",
+                UNTIL_JSON,
+                login("1010000001"))
             .statusCode());
   }
 

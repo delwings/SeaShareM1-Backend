@@ -21,6 +21,7 @@ import com.seashare.seasharem1.infrastructure.adapter.in.web.dto.BoatDraftRespon
 import com.seashare.seasharem1.infrastructure.adapter.in.web.dto.BoatListResponse;
 import com.seashare.seasharem1.infrastructure.adapter.in.web.dto.CompletedBoatResponse;
 import com.seashare.seasharem1.infrastructure.adapter.in.web.dto.CreateDraftRequest;
+import com.seashare.seasharem1.infrastructure.adapter.in.web.dto.MaintenanceRequest;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.UUID;
@@ -119,11 +120,20 @@ public class BoatController {
     deleteBoat.deleteBoat(ownerId(jwt), boatId);
   }
 
-  /** Envía la embarcación a mantenimiento (sin motivo). */
+  /** Envía la embarcación a mantenimiento (sin motivo); la fecha de fin es obligatoria. */
   @PostMapping("/{boatId}/maintenance/start")
   public CompletedBoatResponse startMaintenance(
-      @AuthenticationPrincipal Jwt jwt, @PathVariable UUID boatId) {
-    return BoatWebMapper.toCompleted(sendToMaintenance.sendToMaintenance(ownerId(jwt), boatId));
+      @AuthenticationPrincipal Jwt jwt,
+      @PathVariable UUID boatId,
+      @RequestBody(required = false) MaintenanceRequest request) {
+    return BoatWebMapper.toCompleted(
+        sendToMaintenance.sendToMaintenance(
+            ownerId(jwt),
+            boatId,
+            MaintenanceDates.parse(
+                "maintenance_start", request == null ? null : request.maintenanceStart()),
+            MaintenanceDates.parse(
+                "maintenance_until", request == null ? null : request.maintenanceUntil())));
   }
 
   /** Termina el mantenimiento y deja la embarcación Disponible. */

@@ -1,6 +1,7 @@
 package com.seashare.seasharem1.application.port.out;
 
 import com.seashare.seasharem1.domain.model.MaintenanceBy;
+import com.seashare.seasharem1.domain.model.MaintenanceWindow;
 import com.seashare.seasharem1.domain.model.Port;
 import com.seashare.seasharem1.domain.model.Vessel;
 import com.seashare.seasharem1.domain.model.VesselStatus;
@@ -53,9 +54,11 @@ public interface VesselRepositoryPort {
    * Pasa de Disponible a En Mantenimiento/Limpieza de forma atómica, anotando quién la envió, solo
    * si sigue sin eliminar, es del propietario y continúa Disponible.
    *
+   * <p>Guarda además la ventana y deja el aviso para el Módulo 2 en la misma transacción.
+   *
    * @return {@code true} si cambió; {@code false} si otro cambio se adelantó
    */
-  boolean startMaintenance(UUID id, UUID ownerId, MaintenanceBy by);
+  boolean startMaintenance(UUID id, UUID ownerId, MaintenanceBy by, MaintenanceWindow window);
 
   /**
    * Pasa de En Mantenimiento/Limpieza a Disponible de forma atómica, solo si sigue sin eliminar, es
@@ -69,7 +72,7 @@ public interface VesselRepositoryPort {
    * Pasa de Disponible a En Mantenimiento/Limpieza por decisión del administrador (cualquier
    * propietario), anotando origen ADMIN, solo si sigue sin eliminar y Disponible.
    */
-  boolean startMaintenanceAsAdmin(UUID id);
+  boolean startMaintenanceAsAdmin(UUID id, MaintenanceWindow window);
 
   /**
    * Pasa de En Mantenimiento/Limpieza a Disponible por decisión del administrador, solo si sigue
@@ -83,6 +86,17 @@ public interface VesselRepositoryPort {
    * solicitado. Devuelve falso si no cambió nada (p. ej. ya estaba solicitada).
    */
   boolean markReviewRequested(UUID id, UUID ownerId);
+
+  /** Ventana del mantenimiento guardada, si la hay (la de un aviso del Módulo 2 no tiene). */
+  Optional<MaintenanceWindow> findMaintenanceWindow(UUID id);
+
+  /**
+   * Catálogo: embarcaciones registradas (ni borrador ni eliminadas), ordenadas por nombre, cuyo
+   * nombre o puerto contiene {@code query} (sin distinguir mayúsculas; nulo = todas).
+   *
+   * @param page página, desde 1
+   */
+  VesselPage searchRegistered(String query, int page, int size);
 
   /** Momento (UTC) del último cambio de estado, si alguno quedó registrado. */
   Optional<LocalDateTime> findStatusChangedAt(UUID id);

@@ -7,13 +7,17 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import com.seashare.seasharem1.application.usecase.OwnerMaintenanceService;
 import com.seashare.seasharem1.domain.exception.BoatMaintenanceConflictException;
 import com.seashare.seasharem1.domain.exception.ResourceNotFoundException;
+import com.seashare.seasharem1.domain.exception.ValidationFailedException;
 import com.seashare.seasharem1.domain.model.AdditionalServices;
 import com.seashare.seasharem1.domain.model.MaintenanceBy;
 import com.seashare.seasharem1.domain.model.Vessel;
 import com.seashare.seasharem1.domain.model.VesselStatus;
 import com.seashare.seasharem1.domain.model.VesselType;
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -23,13 +27,16 @@ class OwnerMaintenanceServiceTest {
   private static final UUID OWNER = UUID.randomUUID();
   private static final UUID OTHER = UUID.randomUUID();
 
+  private static final Instant UNTIL = Instant.parse("2026-11-10T00:00:00Z");
+
   private Fakes.Vessels vessels;
   private OwnerMaintenanceService service;
 
   @BeforeEach
   void setUp() {
     vessels = new Fakes.Vessels();
-    service = new OwnerMaintenanceService(vessels, new Fakes.Ports());
+    Clock clock = Clock.fixed(Instant.parse("2026-11-04T02:00:00Z"), ZoneOffset.UTC);
+    service = new OwnerMaintenanceService(vessels, new Fakes.Ports(), clock);
   }
 
   private Vessel boat(VesselStatus status, MaintenanceBy by) {
@@ -75,7 +82,7 @@ class OwnerMaintenanceServiceTest {
   void sendsAnAvailableBoatToMaintenanceAndRecordsTheOwner() {
     Vessel vessel = boat(VesselStatus.AVAILABLE, null);
 
-    var result = service.sendToMaintenance(OWNER, vessel.id());
+    var result = service.sendToMaintenance(OWNER, vessel.id(), null, UNTIL);
 
     assertEquals(VesselStatus.MAINTENANCE, result.vessel().status());
     assertEquals(MaintenanceBy.OWNER, vessels.store.get(vessel.id()).maintenanceBy());
@@ -85,7 +92,7 @@ class OwnerMaintenanceServiceTest {
   void sendingABoatAlreadyInMaintenanceKeepsItsOrigin() {
     Vessel vessel = boat(VesselStatus.MAINTENANCE, MaintenanceBy.ADMIN);
 
-    var result = service.sendToMaintenance(OWNER, vessel.id());
+    var result = service.sendToMaintenance(OWNER, vessel.id(), null, UNTIL);
 
     assertEquals(VesselStatus.MAINTENANCE, result.vessel().status());
     assertEquals(MaintenanceBy.ADMIN, vessels.store.get(vessel.id()).maintenanceBy());
@@ -100,7 +107,7 @@ class OwnerMaintenanceServiceTest {
       BoatMaintenanceConflictException failure =
           assertThrows(
               BoatMaintenanceConflictException.class,
-              () -> service.sendToMaintenance(OWNER, vessel.id()));
+              () -> service.sendToMaintenance(OWNER, vessel.id(), null, UNTIL));
 
       assertEquals(status, failure.currentStatus());
       assertEquals(status, vessels.store.get(vessel.id()).status());
@@ -165,11 +172,13 @@ class OwnerMaintenanceServiceTest {
     Vessel vessel = boat(VesselStatus.AVAILABLE, null);
 
     assertThrows(
-        ResourceNotFoundException.class, () -> service.sendToMaintenance(OTHER, vessel.id()));
+        ResourceNotFoundException.class,
+        () -> service.sendToMaintenance(OTHER, vessel.id(), null, UNTIL));
     assertThrows(
         ResourceNotFoundException.class, () -> service.finishMaintenance(OTHER, vessel.id()));
     assertThrows(
-        ResourceNotFoundException.class, () -> service.sendToMaintenance(OWNER, UUID.randomUUID()));
+        ResourceNotFoundException.class,
+        () -> service.sendToMaintenance(OWNER, UUID.randomUUID(), null, UNTIL));
   }
 
   @Test
@@ -180,6 +189,38 @@ class OwnerMaintenanceServiceTest {
                 UUID.randomUUID(), OWNER, "Borrador", "CP-09-0001-A", VesselType.YACHT, 8));
 
     assertThrows(
-        ResourceNotFoundException.class, () -> service.sendToMaintenance(OWNER, draft.id()));
+        ResourceNotFoundException.class,
+        () -> service.sendToMaintenance(OWNER, draft.id(), null, UNTIL));
+  }
+
+  @Test
+  void sendingToMaintenanceRequiresAFutureEndAfterTheStart() {
+    Vessel vessel = boat(VesselStatus.AVAILABLE, null);
+
+    assertThrows(
+        ValidationFailedException.class,
+        () -> service.sendToMaintenance(OWNER, vessel.id(), null, null));
+    assertThrows(
+        ValidationFailedException.class,
+        () ->
+            service.sendToMaintenance(
+                OWNER, vessel.id(), null, Instant.parse("2026-11-03T00:00:00Z")));
+    assertThrows(
+        ValidationFailedException.class,
+        () ->
+            service.sendToMaintenance(
+                OWNER, vessel.id(), Instant.parse("2026-11-11T00:00:00Z"), UNTIL));
+    assertEquals(VesselStatus.AVAILABLE, vessels.store.get(vessel.id()).status());
+  }
+
+  @Test
+  void sendingToMaintenanceStoresTheWindowStartingNowByDefault() {
+    Vessel vessel = boat(VesselStatus.AVAILABLE, null);
+
+    service.sendToMaintenance(OWNER, vessel.id(), null, UNTIL);
+
+    var window = vessels.windows.get(vessel.id());
+    assertEquals(LocalDateTime.of(2026, 11, 4, 2, 0), window.start());
+    assertEquals(LocalDateTime.of(2026, 11, 10, 0, 0), window.until());
   }
 }

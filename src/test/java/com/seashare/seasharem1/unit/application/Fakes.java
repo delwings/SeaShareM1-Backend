@@ -4,11 +4,13 @@ import com.seashare.seasharem1.application.port.out.ImageStoragePort;
 import com.seashare.seasharem1.application.port.out.NotificationRepositoryPort;
 import com.seashare.seasharem1.application.port.out.PortRepositoryPort;
 import com.seashare.seasharem1.application.port.out.StoredImage;
+import com.seashare.seasharem1.application.port.out.VesselPage;
 import com.seashare.seasharem1.application.port.out.VesselRepositoryPort;
 import com.seashare.seasharem1.domain.exception.BusinessConflictException;
 import com.seashare.seasharem1.domain.exception.ExternalServiceUnavailableException;
 import com.seashare.seasharem1.domain.exception.FieldViolation;
 import com.seashare.seasharem1.domain.model.MaintenanceBy;
+import com.seashare.seasharem1.domain.model.MaintenanceWindow;
 import com.seashare.seasharem1.domain.model.Notification;
 import com.seashare.seasharem1.domain.model.NotificationType;
 import com.seashare.seasharem1.domain.model.Port;
@@ -110,12 +112,14 @@ final class Fakes {
     }
 
     @Override
-    public boolean startMaintenance(UUID id, UUID ownerId, MaintenanceBy by) {
+    public boolean startMaintenance(
+        UUID id, UUID ownerId, MaintenanceBy by, MaintenanceWindow window) {
       Vessel vessel = store.get(id);
       if (vessel == null || !vessel.ownerId().equals(ownerId) || !vessel.canBeSentToMaintenance()) {
         return false;
       }
       store.put(id, withState(vessel, VesselStatus.MAINTENANCE, by));
+      windows.put(id, window);
       return true;
     }
 
@@ -132,12 +136,13 @@ final class Fakes {
     }
 
     @Override
-    public boolean startMaintenanceAsAdmin(UUID id) {
+    public boolean startMaintenanceAsAdmin(UUID id, MaintenanceWindow window) {
       Vessel vessel = store.get(id);
       if (vessel == null || !vessel.canBeSentToMaintenance()) {
         return false;
       }
       store.put(id, withState(vessel, VesselStatus.MAINTENANCE, MaintenanceBy.ADMIN));
+      windows.put(id, window);
       return true;
     }
 
@@ -149,6 +154,28 @@ final class Fakes {
       }
       store.put(id, withState(vessel, VesselStatus.AVAILABLE, null));
       return true;
+    }
+
+    /** Ventanas de mantenimiento guardadas por embarcación. */
+    final Map<UUID, MaintenanceWindow> windows = new LinkedHashMap<>();
+
+    @Override
+    public Optional<MaintenanceWindow> findMaintenanceWindow(UUID id) {
+      return Optional.ofNullable(windows.get(id));
+    }
+
+    @Override
+    public VesselPage searchRegistered(String query, int page, int size) {
+      String needle = query == null ? "" : query.trim().toLowerCase();
+      List<Vessel> all =
+          store.values().stream()
+              .filter(v -> !v.deleted() && !v.isDraft())
+              .filter(v -> v.name().toLowerCase().contains(needle))
+              .sorted(java.util.Comparator.comparing(Vessel::name))
+              .toList();
+      int from = Math.min((page - 1) * size, all.size());
+      int to = Math.min(from + size, all.size());
+      return new VesselPage(all.subList(from, to), all.size());
     }
 
     /** Momentos del último cambio de estado y bitácora de cambios automáticos. */

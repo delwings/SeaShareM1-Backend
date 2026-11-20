@@ -8,9 +8,12 @@ import com.seashare.seasharem1.application.port.out.VesselRepositoryPort;
 import com.seashare.seasharem1.domain.exception.BoatMaintenanceConflictException;
 import com.seashare.seasharem1.domain.exception.ResourceNotFoundException;
 import com.seashare.seasharem1.domain.model.MaintenanceBy;
+import com.seashare.seasharem1.domain.model.MaintenanceWindow;
 import com.seashare.seasharem1.domain.model.Port;
 import com.seashare.seasharem1.domain.model.Vessel;
 import com.seashare.seasharem1.domain.model.VesselStatus;
+import java.time.Clock;
+import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -30,22 +33,26 @@ public class OwnerMaintenanceService implements SendToMaintenanceUseCase, Finish
 
   private final VesselRepositoryPort vessels;
   private final PortRepositoryPort ports;
+  private final Clock clock;
 
-  public OwnerMaintenanceService(VesselRepositoryPort vessels, PortRepositoryPort ports) {
+  public OwnerMaintenanceService(
+      VesselRepositoryPort vessels, PortRepositoryPort ports, Clock clock) {
     this.vessels = vessels;
     this.ports = ports;
+    this.clock = clock;
   }
 
   @Override
-  public CompletedBoat sendToMaintenance(UUID ownerId, UUID boatId) {
+  public CompletedBoat sendToMaintenance(UUID ownerId, UUID boatId, Instant start, Instant until) {
     Vessel vessel = findOwned(ownerId, boatId);
+    MaintenanceWindow window = MaintenancePeriod.resolve(start, until, clock);
     if (vessel.status() == VesselStatus.MAINTENANCE) {
       return completed(vessel);
     }
     if (!vessel.canBeSentToMaintenance()) {
       throw conflict(CANNOT_SEND, vessel);
     }
-    if (!vessels.startMaintenance(boatId, ownerId, MaintenanceBy.OWNER)) {
+    if (!vessels.startMaintenance(boatId, ownerId, MaintenanceBy.OWNER, window)) {
       // Otro cambio se adelantó: se relee para responder según el estado nuevo.
       Vessel current = findOwned(ownerId, boatId);
       if (current.status() != VesselStatus.MAINTENANCE) {
